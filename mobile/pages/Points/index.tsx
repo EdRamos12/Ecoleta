@@ -1,19 +1,95 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import Constants from 'expo-constants';
 import MapView, {Marker} from 'react-native-maps';
 import {SvgUri} from 'react-native-svg';
 import {Feather as Icon} from '@expo/vector-icons';
-import {useNavigation} from '@react-navigation/native';
-import {StyleSheet, Text, View, TouchableOpacity, ScrollView} from 'react-native';
+import {useNavigation, useRoute} from '@react-navigation/native';
+import api from '../../services/api' ;
+import * as Location from 'expo-location';
+import {StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, SafeAreaView, Alert} from 'react-native';
+
+interface Item {
+  id: number,
+  title: string,
+  image_url: string,
+}
+
+interface Point {
+  id: number,
+  name: string,
+  image: string,
+  latitude: number,
+  longitude: number;
+}
+
+interface Params {
+  state: string,
+  city: string,
+}
 
 const Points = () => {
+  const [items, setItems] = useState<Item[]>([]);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Number[]>([]);
+  const [initialPosition, setInitialPosition] = useState<[number, number]>([0,0]);
   const navigation = useNavigation();
+  const route = useRoute();
+  const routeParams = route.params as Params;
+
+  useEffect(() => {
+    async function loadPosition() {
+      const {status} = await Location.requestPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert('Something went wrong.', 'We need your permission to get a location!');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync();
+
+      setInitialPosition([
+        location.coords.latitude,
+        location.coords.longitude
+      ]);
+    }
+
+    api.get('items').then(response => {
+      setItems(response.data);
+    });
+
+    loadPosition();
+  }, []);
+
+  useEffect(() => {
+    api.get('points', {
+      params: {
+        city: routeParams.city,
+        state: routeParams.state,
+        items: selectedItems
+      }
+    }).then(response => {
+      setPoints(response.data);
+    });
+  }, [selectedItems])
+
+  function handleSelectItem(id: number) {
+    if (selectedItems.findIndex(item => item === id) >= 0) {
+      setSelectedItems(selectedItems.filter(item => item !== id));
+    } else {
+      setSelectedItems([ ...selectedItems, id ]);
+    }
+  }
+
   function handleNavigation() {
     navigation.goBack();
   }
 
+  function handleNavigateDetail(id: number) {
+    navigation.navigate('Detail', { point_id: id });
+  }
+
   return (
-    <>
+    <SafeAreaView style={{flex: 1}}>
       <View style={styles.container}>
         <TouchableOpacity onPress={handleNavigation}>
           <Icon name="arrow-left" size={20} color="#34cb79"/>
@@ -23,40 +99,31 @@ const Points = () => {
         <Text style={styles.description}>Find in the map a point of collection.</Text>
 
         <View style={styles.mapContainer}>
-          <MapView style={styles.map} initialRegion={{latitude: -23.7104888, longitude: -46.5258909, latitudeDelta: 0.014, longitudeDelta: 0.014}}>
-            <Marker coordinate={{latitude: -23.7104888, longitude: -46.5258909}}/>
-          </MapView>
+          { initialPosition[0] !== 0 && (
+            <MapView style={styles.map} loadingEnabled={initialPosition[0] === 0} initialRegion={{latitude: initialPosition[0], longitude: initialPosition[1], latitudeDelta: 0.014, longitudeDelta: 0.014}}>
+              {points.map(point => (
+                <Marker key={String(point.id)} style={styles.mapMarker} coordinate={{latitude: point.latitude, longitude: point.longitude}} onPress={() => handleNavigateDetail(point.id)}>
+                  <View style={styles.mapMarkerContainer}>
+                    <Image style={styles.mapMarkerImage} source={{uri: point.image}} />
+                    <Text style={styles.mapMarkerTitle}>{point.name}</Text>
+                  </View>
+                </Marker>
+              ))}
+            </MapView>
+          )}
         </View>
       </View>
       <View style={styles.itemsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal: 20}}>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.item}>
-            <SvgUri width={42} height={42} uri="http://192.168.0.6:3333/uploads/lamps.svg" />
-            <Text style={styles.itemTitle}>Lamps</Text>
-          </TouchableOpacity>
+          {items.map(item => (
+            <TouchableOpacity key={String(item.id)} style={[styles.item, selectedItems.includes(item.id) ? styles.selectedItem : {}]} activeOpacity={.6} onPress={() => handleSelectItem(item.id)}>
+              <SvgUri width={42} height={42} uri={item.image_url} />
+              <Text style={styles.itemTitle}>{item.title}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
-    </>
+    </SafeAreaView>
   );
 }
 

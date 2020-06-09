@@ -1,13 +1,53 @@
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {Feather as Icon} from '@expo/vector-icons';
 import {RectButton} from 'react-native-gesture-handler';
 import {useNavigation} from '@react-navigation/native';
+import RNPickerSelect, {Item} from 'react-native-picker-select';
+import axios from 'axios';
 import {StyleSheet, ImageBackground, View, Image, Text} from 'react-native';
+
+interface IBGEUFResponse {
+	sigla: string;
+	nome: string;
+}
+
+interface IBGECityResponse {
+	nome: string;
+}
 
 const Home = () => {
   const navigation = useNavigation();
+  const [citiesList, setCitiesList] = useState<Item[]>([]);
+  const [selectedCity, setSelectedCity] = useState('0');
+  const [selectedUf, setSelectedUf] = useState('0');
+  const [ufList, setUfList] = useState<Item[]>([]);
+    
+  useEffect(() => {
+    axios.get<IBGEUFResponse[]>('https://servicodados.ibge.gov.br/api/v1/localidades/estados').then(response => {
+      const yeah:Item[] = response.data.map(data => {
+        return {label: `(${data.sigla}) ${data.nome}`, value: data.sigla}
+      });
+      setUfList(yeah);
+    });
+  }, []);
+
+  useEffect(() => {
+		if (selectedUf === '0') {
+			return;
+		}
+		axios.get<IBGECityResponse[]>(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedUf}/municipios`).then(response => {
+			const dude:Item[] = response.data.map(data => {
+        return {label: data.nome, value: data.nome}
+      });
+      setCitiesList(dude);
+		});
+	}, [selectedUf]);
+
   function handleNavigation() {
-    navigation.navigate('Points');
+    navigation.navigate('Points', {
+      state: selectedUf,
+      city: selectedCity,
+    });
   }
   return (
     <ImageBackground source={require('../../assets/home-background.png')} imageStyle={{width: 274, height: 368}} style={styles.container}>
@@ -18,6 +58,8 @@ const Home = () => {
       </View>
 
       <View>
+        <RNPickerSelect useNativeAndroidPickerStyle={false} style={{inputIOS: styles.input, inputAndroid: styles.input}} onValueChange={(value) => setSelectedUf(value)} items={ufList} />
+        <RNPickerSelect useNativeAndroidPickerStyle={false} style={{inputIOS: styles.input, inputAndroid: styles.input}} onValueChange={(value) => setSelectedCity(value)} items={citiesList} />
         <RectButton style={styles.button} onPress={handleNavigation}>
           <View style={styles.buttonIcon}>
             <Text>
